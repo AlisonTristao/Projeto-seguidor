@@ -9,7 +9,7 @@ BluetoothSerial SerialBT;
 TaskHandle_t observer;
 
 // constantes do PID
-float Kp = 0.005, Ki = 0.005, Kd = 0.005;
+unsigned float Kp = 0.005, Ki = 0.005, Kd = 0.005;
 
 // pinos da ponte H
 #define PWMA 21
