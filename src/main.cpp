@@ -9,16 +9,14 @@ BluetoothSerial SerialBT;
 TaskHandle_t observer;
 
 // constantes do PID
-#define Kp 0.005
-#define Ki 0.005
-#define Kd 0.005
+float Kp = 0.005, Ki = 0.005, Kd = 0.005;
 
 // pinos da ponte H
 #define PWMA 21
 #define PWMB 19
 
 // velocidade do carrinho
-#define speed 4095/2
+float speed = 4095/2;
 
 // config da linha de sensores
 const uint8_t qtdSensores = 8;
@@ -35,25 +33,43 @@ float erro, PID;
 #define intercessao 4095
 bool ligado;
 int total;
-int volta;
+int volta = 0;
 
 String texto = "";
 void recebeDados(){
+  // recebe as chars e soma em um texto
   char a = SerialBT.read();
   texto += a;
+
+  // separa as constantes quando recebe o texto todo
   if(a == '}'){
-      Serial.println(texto); 
-      texto = "";
+    // muda as constantes 
+    Kp = (texto.substring(0, texto.indexOf('/'))).toFloat();
+    Ki = (texto.substring(texto.indexOf('/')+1, texto.indexOf('%'))).toFloat();
+    Kd = (texto.substring(texto.indexOf('%')+1, texto.indexOf('&'))).toFloat();
+    speed = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
+
+    // printa os valores
+    Serial.print(Kp);     Serial.print("\t");  
+    Serial.print(Ki);     Serial.print("\t"); 
+    Serial.print(Kd);     Serial.print("\t"); 
+    Serial.print(speed);  Serial.println("");  
+
+    // limpa a variavel para o proximo loop
+    texto = "";
   }
 }
 
 void enviaDados(void * pvParameters){
   for(;;){ // loop infinito
+    // caso ele receba algum dado ele altera as constantes 
     if(SerialBT.available()){
       recebeDados();
     }else{
+      // senao ele envia os dados 
       delay(150);
-      SerialBT.println("{"+String(erro)+"}");
+      // caso queirma mudar oq ele envia mude aqui
+      SerialBT.println("{"+String(PID)+"}");
     }
   }
 }
@@ -66,7 +82,7 @@ void setup() {
   qtr.setTypeAnalog();
   qtr.setSensorPins((const uint8_t[]){32, 33, 25, 26, 27, 14, 12, 13}, qtdSensores);
   //qtr.setSensorPins((const uint8_t[]){13, 12, 14, 27, 26, 25, 33, 32}, qtdSensores);
-  qtr.setEmitterPin(15);
+  qtr.setEmitterPin(35);
 
   // usamos apenas para iniciar as variaveis da biblioteca
   qtr.calibrate();
@@ -140,23 +156,23 @@ void calculaPID(){
 
 void motors(){
   // controle de curva com PID
-  if (volta){
+  if (volta == 0){
     if(PID == 0){
-      ledcWrite(1, speed);
       ledcWrite(0, speed);
+      ledcWrite(1, speed);
     }else if(PID > 0){
-      ledcWrite(1, speed);
-      ledcWrite(0, speed - PID);
-    }else{
-      ledcWrite(1, speed + PID);
       ledcWrite(0, speed);
+      ledcWrite(1, speed - PID);
+    }else{
+      ledcWrite(0, speed + PID);
+      ledcWrite(1, speed);
     }
   }
-  else{
+  /*else{
       ledcWrite(1, 0);
       ledcWrite(0, 0); 
 
-  }
+  }*/
 }
 
 /*void Linha_de_chegada() {
