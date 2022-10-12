@@ -30,12 +30,31 @@ unsigned long temp_anterior=0, temp_atual, t;
 // variaveis para o PID
 int P, I, D, erroPassado, erroSomado = 0;
 float erro, PID;
-bool volta1 = true;
+
+// variaveis para execoes
+#define intercessao 4095
+bool ligado;
+int total;
+int volta;
+
+String texto = "";
+void recebeDados(){
+  char a = SerialBT.read();
+  texto += a;
+  if(a == '}'){
+      Serial.println(texto); 
+      texto = "";
+  }
+}
 
 void enviaDados(void * pvParameters){
   for(;;){ // loop infinito
-    delay(150);
-    SerialBT.println("{"+String(PID)+"}");
+    if(SerialBT.available()){
+      recebeDados();
+    }else{
+      delay(150);
+      SerialBT.println("{"+String(erro)+"}");
+    }
   }
 }
 
@@ -45,7 +64,8 @@ void setup() {
 
   // configuração da linha de sensores
   qtr.setTypeAnalog();
-  qtr.setSensorPins((const uint8_t[]){13, 12, 14, 27, 26, 25, 33, 32}, qtdSensores);
+  qtr.setSensorPins((const uint8_t[]){32, 33, 25, 26, 27, 14, 12, 13}, qtdSensores);
+  //qtr.setSensorPins((const uint8_t[]){13, 12, 14, 27, 26, 25, 33, 32}, qtdSensores);
   qtr.setEmitterPin(15);
 
   // usamos apenas para iniciar as variaveis da biblioteca
@@ -106,7 +126,7 @@ void calculaPID(){
   }
 
   // caso esteja na primeira volta ele usa metade da velocidade
-  if(volta1){
+  if(volta == 0){
     map(PID,-speed,speed,-speed/2,speed/2);
   }
 
@@ -120,17 +140,32 @@ void calculaPID(){
 
 void motors(){
   // controle de curva com PID
-  if(PID == 0){
-    ledcWrite(1, speed);
-    ledcWrite(0, speed);
-  }else if(PID > 0){
-    ledcWrite(1, speed);
-    ledcWrite(0, speed - PID);
-  }else{
-    ledcWrite(1, speed + PID);
-    ledcWrite(0, speed);
+  if (volta){
+    if(PID == 0){
+      ledcWrite(1, speed);
+      ledcWrite(0, speed);
+    }else if(PID > 0){
+      ledcWrite(1, speed);
+      ledcWrite(0, speed - PID);
+    }else{
+      ledcWrite(1, speed + PID);
+      ledcWrite(0, speed);
+    }
+  }
+  else{
+      ledcWrite(1, 0);
+      ledcWrite(0, 0); 
+
   }
 }
+
+/*void Linha_de_chegada() {
+    delay(50);
+  if (volta == 0){
+    ligado = false;
+  }
+  volta += 1;
+}*/
 
 void loop() {
   // calcula a posição da linha 
@@ -139,6 +174,10 @@ void loop() {
   for (uint8_t i = 0; i < qtdSensores; i++) {
     Serial.print(sensorValues[i]);
     Serial.print('\t');
+    total += sensorValues[i];
+  }
+  if (total <= intercessao){ //caso haja intercessao
+    delay(250);
   }
 
   // calcula o erro 
