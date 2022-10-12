@@ -80,9 +80,9 @@ void setup() {
 
   // configuração da linha de sensores
   qtr.setTypeAnalog();
-  qtr.setSensorPins((const uint8_t[]){32, 33, 25, 26, 27, 14, 12, 13}, qtdSensores);
+  qtr.setSensorPins((const uint8_t[]){35,32, 33, 25, 26, 27, 14, 12}, qtdSensores);
   //qtr.setSensorPins((const uint8_t[]){13, 12, 14, 27, 26, 25, 33, 32}, qtdSensores);
-  qtr.setEmitterPin(35);
+  qtr.setEmitterPin(13);
 
   // usamos apenas para iniciar as variaveis da biblioteca
   qtr.calibrate();
@@ -100,8 +100,8 @@ void setup() {
   pinMode(PWMB, OUTPUT);
   ledcSetup(0, 5000, 12); // canal para esquerdo
   ledcSetup(1, 5000, 12); // canal para o direito
-  ledcAttachPin(PWMA, 0);
-  ledcAttachPin(PWMB, 1);
+  ledcAttachPin(PWMA, 1);
+  ledcAttachPin(PWMB, 0);
   // inicia como 0
   //ledcWrite(0, 0);
   //ledcWrite(1, 0);
@@ -187,6 +187,7 @@ void loop() {
   // calcula a posição da linha 
   uint16_t position = qtr.readLineWhite(sensorValues);
 
+  // printa os valores lidos
   for (uint8_t i = 0; i < qtdSensores; i++) {
     Serial.print(sensorValues[i]);
     Serial.print('\t');
