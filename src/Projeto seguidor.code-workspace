@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "Projeto seguidor",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"pidcontrol": "cpp"
+		}
+	}
+}

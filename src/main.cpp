@@ -9,7 +9,7 @@ BluetoothSerial SerialBT;
 TaskHandle_t observer;
 
 // constantes do PID
-unsigned float Kp = 0.005, Ki = 0.005, Kd = 0.005;
+float Kp = 0.005, Ki = 0.005, Kd = 0.005;
 
 // pinos da ponte H
 #define PWMA 21
@@ -69,7 +69,7 @@ void enviaDados(void * pvParameters){
       // senao ele envia os dados 
       delay(150);
       // caso queirma mudar oq ele envia mude aqui
-      SerialBT.println("{"+String(PID)+"}");
+      SerialBT.println("{"+String(erro)+"}");
     }
   }
 }
@@ -156,17 +156,22 @@ void calculaPID(){
 
 void motors(){
   // controle de curva com PID
+
+  // nao sei se essa parte é melhor assim @alison
+  int velEsq = speed, velDir = speed;
+
   if (volta == 0){
-    if(PID == 0){
-      ledcWrite(0, speed);
-      ledcWrite(1, speed);
-    }else if(PID > 0){
-      ledcWrite(0, speed);
-      ledcWrite(1, speed - PID);
+    if(PID > 0){
+      velEsq = speed - PID;
     }else{
-      ledcWrite(0, speed + PID);
-      ledcWrite(1, speed);
+      velDir = speed + PID;
     }
+
+    map(velEsq, -speed, speed, 1000, speed);
+    map(velDir, -speed, speed, 1000, speed);
+
+    ledcWrite(1, velEsq);
+    ledcWrite(0, velDir);
   }
   /*else{
       ledcWrite(1, 0);
