@@ -9,14 +9,14 @@ BluetoothSerial SerialBT;
 TaskHandle_t observer;
 
 // constantes do PID
-float Kp = 0.005, Ki = 0.005, Kd = 0.005;
+float kp = 117, ki = 0.2, kd = 0;
 
 // pinos da ponte H
 #define PWMA 21
 #define PWMB 19
 
 // velocidade do carrinho
-float speed = 4095/2;
+float speed = 4095/3;
 
 // config da linha de sensores
 const uint8_t qtdSensores = 8;
@@ -44,15 +44,15 @@ void recebeDados(){
   // separa as constantes quando recebe o texto todo
   if(a == '}'){
     // muda as constantes 
-    Kp = (texto.substring(0, texto.indexOf('/'))).toFloat();
-    Ki = (texto.substring(texto.indexOf('/')+1, texto.indexOf('%'))).toFloat();
-    Kd = (texto.substring(texto.indexOf('%')+1, texto.indexOf('&'))).toFloat();
+    kp = (texto.substring(1, texto.indexOf('/'))).toFloat();
+    ki = (texto.substring(texto.indexOf('/')+1, texto.indexOf('%'))).toFloat();
+    kd = (texto.substring(texto.indexOf('%')+1, texto.indexOf('&'))).toFloat();
     speed = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
 
     // printa os valores
-    Serial.print(Kp);     Serial.print("\t");  
-    Serial.print(Ki);     Serial.print("\t"); 
-    Serial.print(Kd);     Serial.print("\t"); 
+    Serial.print(kp);     Serial.print("\t");  
+    Serial.print(ki);     Serial.print("\t"); 
+    Serial.print(kd);     Serial.print("\t"); 
     Serial.print(speed);  Serial.println("");  
 
     // limpa a variavel para o proximo loop
@@ -69,7 +69,7 @@ void enviaDados(void * pvParameters){
       // senao ele envia os dados 
       delay(150);
       // caso queirma mudar oq ele envia mude aqui
-      SerialBT.println("{"+String(erro)+"}");
+      SerialBT.println("{"+String(I)+"}");
     }
   }
 }
@@ -80,7 +80,7 @@ void setup() {
 
   // configuração da linha de sensores
   qtr.setTypeAnalog();
-  qtr.setSensorPins((const uint8_t[]){35,32, 33, 25, 26, 27, 14, 12}, qtdSensores);
+  qtr.setSensorPins((const uint8_t[]){35, 32, 33, 25, 26, 27, 14, 12}, qtdSensores);
   //qtr.setSensorPins((const uint8_t[]){13, 12, 14, 27, 26, 25, 33, 32}, qtdSensores);
   qtr.setEmitterPin(13);
 
@@ -121,15 +121,15 @@ void calculaPID(){
   // salva o tempo passado pra calcular a derivada
   temp_atual = millis();
   // calcula o tempo passado 
-  t = temp_atual - temp_anterior;
+  t = (temp_atual - temp_anterior);
 
   // define os valores
-  P = erro;
-  I = (erro + erroSomado)*t;
-  D = (erro - erroPassado)/t;
+  P = erro * kp;
+  I = (erroSomado) * ki;
+  D = ((erro - erroPassado)/t) * kd;
 
   // calcula o PID
-  PID = (Kp * P) + (Ki * I) + (Kd * D);
+  PID = (P) + (I) + (D);
 
   // anti-windup 
   // caso o PID passe o valor da velocidade max n soma o erro
@@ -137,9 +137,17 @@ void calculaPID(){
     PID = speed;
   }else if(PID<-speed){
     PID = -speed;
-  }else{
-    erroSomado += erro;
   }
+
+  if((I>=speed)&&(erro >=0)){ 
+    I = speed;
+  }else if((I<=-speed)&&(erro <=0)){
+    I = -speed;
+  }else{
+  erroSomado += erro;
+  }
+
+
 
   // caso esteja na primeira volta ele usa metade da velocidade
   if(volta == 0){
@@ -150,8 +158,18 @@ void calculaPID(){
   erroPassado = erro;
   temp_anterior = temp_atual;
 
-  Serial.println(PID);
-  delay(100);
+  Serial.print("P: ");
+  Serial.print(P);
+  Serial.print("\t");
+  Serial.print("I: ");
+  Serial.print(I);
+  Serial.print("\t");
+  Serial.print("D: ");
+  Serial.print(D);
+  Serial.print("\t");
+  Serial.print("PID: ");
+  Serial.print(PID);
+  Serial.print(" ");
 }
 
 void motors(){
@@ -167,11 +185,14 @@ void motors(){
       velDir = speed + PID;
     }
 
-    map(velEsq, -speed, speed, 1000, speed);
-    map(velDir, -speed, speed, 1000, speed);
-
     ledcWrite(1, velEsq);
     ledcWrite(0, velDir);
+
+    /*Serial.print("motor esq: ");
+    Serial.print(velEsq);
+    Serial.print("\t motor dir:");
+    Serial.print(velDir);
+    Serial.print("\t");*/
   }
   /*else{
       ledcWrite(1, 0);
@@ -194,18 +215,21 @@ void loop() {
 
   // printa os valores lidos
   for (uint8_t i = 0; i < qtdSensores; i++) {
-    Serial.print(sensorValues[i]);
-    Serial.print('\t');
+    //Serial.print(sensorValues[i]);
+    //Serial.print('\t');
     total += sensorValues[i];
   }
-  if (total <= intercessao){ //caso haja intercessao
+
+  Serial.println("");
+  if (total <= intercessao){ //caso haja intercessao7
     delay(250);
   }
 
-  // calcula o erro 
-  erro = ((int)position-3500);
-  Serial.print((int)position-3500);
-  Serial.print("\t");
+  //calcula o erro 
+  Serial.print("Erro: ");
+  erro = (((int)position-3500)/100);
+  Serial.print(erro);
+  Serial.print(" \t");
 
   // calcula o PID
   calculaPID();
