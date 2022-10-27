@@ -9,7 +9,7 @@ BluetoothSerial SerialBT;
 TaskHandle_t observer;
 
 // constantes do PID
-float kp = 117, ki = 0.2, kd = 0;
+float kp = 117, ki = 0.2, kd = 0.0;
 
 // pinos da ponte H
 #define PWMA 21
@@ -69,7 +69,7 @@ void enviaDados(void * pvParameters){
       // senao ele envia os dados 
       delay(150);
       // caso queirma mudar oq ele envia mude aqui
-      SerialBT.println("{"+String(I)+"}");
+      SerialBT.printf("{%d}", D);
     }
   }
 }
@@ -119,7 +119,7 @@ void setup() {
 
 void calculaPID(){
   // salva o tempo passado pra calcular a derivada
-  temp_atual = millis();
+  temp_atual = micros();
   // calcula o tempo passado 
   t = (temp_atual - temp_anterior);
 
@@ -144,7 +144,7 @@ void calculaPID(){
   }else if((I<=-speed)&&(erro <=0)){
     I = -speed;
   }else{
-  erroSomado += erro;
+    erroSomado += erro;
   }
 
 
@@ -222,7 +222,10 @@ void loop() {
 
   Serial.println("");
   if (total <= intercessao){ //caso haja intercessao7
-    delay(250);
+    ledcWrite(1, 0);
+    ledcWrite(0, 0);
+    ledcWrite(1, speed - PID);
+    ledcWrite(0, speed + PID);
   }
 
   //calcula o erro 
