@@ -80,7 +80,7 @@ void setup() {
 
   // configuração da linha de sensores
   qtr.setTypeAnalog();
-  qtr.setSensorPins((const uint8_t[]){8, 34, 35, 32, 33, 25, 26, 27}, qtdSensores);
+  qtr.setSensorPins((const uint8_t[]){34, 35, 32, 33, 25, 26, 27, 14}, qtdSensores);
   //qtr.setSensorPins((const uint8_t[]){13, 12, 14, 27, 26, 25, 33, 32}, qtdSensores);
   qtr.setEmitterPin(14);
 
@@ -146,8 +146,6 @@ void calculaPID(){
   }else{
     erroSomado += erro;
   }
-
-
 
   // caso esteja na primeira volta ele usa metade da velocidade
   if(volta == 0){
@@ -230,7 +228,7 @@ void loop() {
   Serial.print("Erro: ");
   erro = (((int)position-3500)/100);
   Serial.print(erro);
-  Serial.print(" \t");
+  Serial.println();
 
   // calcula o PID
   calculaPID();
