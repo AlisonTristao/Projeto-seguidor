@@ -16,8 +16,10 @@ float kp = 117, ki = 0.2, kd = 0.1;
 #define PWMB 19
 
 // velocidade do carrinho
-float speed = 4095/3;
+bool largada = false;
+float speed = 4095/2;
 int velEsq = speed, velDir = speed;
+float cte = 2.7;
 
 // config da linha de sensores
 const uint8_t qtdSensores = 8;
@@ -32,6 +34,9 @@ float erro, PID;
 
 // variaveis para execoes
 #define intercessao 3000
+#define botao 18
+#define sensoresquerdo 13
+#define sensordireito 36
 bool ligado;
 int total;
 int volta = 0;
@@ -48,13 +53,15 @@ void recebeDados(){
     kp = (texto.substring(1, texto.indexOf('/'))).toFloat();
     ki = (texto.substring(texto.indexOf('/')+1, texto.indexOf('%'))).toFloat();
     kd = (texto.substring(texto.indexOf('%')+1, texto.indexOf('&'))).toFloat();
+    //cte = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
     speed = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
 
     // printa os valores
     Serial.print(kp);     Serial.print("\t");  
     Serial.print(ki);     Serial.print("\t"); 
     Serial.print(kd);     Serial.print("\t"); 
-    Serial.print(speed);  Serial.println("");  
+    Serial.print(speed);  Serial.print("\t");  
+    //Serial.print(cte);  Serial.println("");
 
     // limpa a variavel para o proximo loop
     texto = "";
@@ -62,7 +69,7 @@ void recebeDados(){
 }
 
 void enviaDados(void * pvParameters){
-  for(;;){ // loop infinito
+  for(;;){ // loop perpétuo
     // caso ele receba algum dado ele altera as constantes 
     if(SerialBT.available()){
       recebeDados();
@@ -79,10 +86,13 @@ void setup() {
   Serial.begin(115200);
   SerialBT.begin("Esp32 seguidor v1");
 
+  // liga o led por estilo
+  pinMode(2, OUTPUT);
+  digitalWrite(2, HIGH);
+
   // configuração da linha de sensores
   qtr.setTypeAnalog();
-  qtr.setSensorPins((const uint8_t[]){34, 35, 32, 33, 25, 26, 27, 14}, qtdSensores);
-  //qtr.setSensorPins((const uint8_t[]){13, 12, 14, 27, 26, 25, 33, 32}, qtdSensores);
+  qtr.setSensorPins((const uint8_t[]){39, 34, 35, 32, 33, 25, 26, 27}, qtdSensores);
   qtr.setEmitterPin(14);
 
   // usamos apenas para iniciar as variaveis da biblioteca
@@ -97,6 +107,7 @@ void setup() {
   }
 
   // config ponte H
+  pinMode(botao, INPUT);
   pinMode(PWMA, OUTPUT);
   pinMode(PWMB, OUTPUT);
   ledcSetup(0, 5000, 12); // canal para esquerdo
@@ -124,7 +135,7 @@ void calculaPID(){
   // define os valores
   P = erro * kp;
   I = (erroSomado)* ki;
-  D = ((erro - erroPassado)/t) * kd;
+  D = ((erro - erroPassado)) * kd;
 
   // calcula o PID
   PID = (P) + (I) + (D);
@@ -154,7 +165,7 @@ void calculaPID(){
   erroPassado = erro;
   temp_anterior = temp_atual;
 
-  /*Serial.print("P: ");
+  Serial.print("P: ");
   Serial.print(P);
   Serial.print("\t");
   Serial.print("I: ");
@@ -165,70 +176,66 @@ void calculaPID(){
   Serial.print("\t");
   Serial.print("PID: ");
   Serial.print(PID);
-  Serial.print(" ");*/
+  Serial.print(" ");
 }
 
 void motors(){
   // controle de curva com PID
-
-  // nao sei se essa parte é melhor assim @alison
-
-  if (volta == 0){
-    if(PID > 0){
-      velEsq = speed - PID;
-    }else{
-      velDir = speed + PID;
-    }
-
-    ledcWrite(1, velEsq);
-    ledcWrite(0, velDir);
-
-    /*Serial.print("motor esq: ");
-    Serial.print(velEsq);
-    Serial.print("\t motor dir:");
-    Serial.print(velDir);
-    Serial.print("\t");*/
+  if(PID > 0){
+    velEsq = speed - PID;
+    velDir = speed; //- PID*PID/(cte*speed);
+  }else{
+    velDir = speed + PID;
+    velEsq = speed;// - PID*PID/(cte*speed);
   }
-  /*else{
-      ledcWrite(1, 0);
-      ledcWrite(0, 0); 
 
-  }*/
+  ledcWrite(1, velEsq);
+  ledcWrite(0, velDir);
+
+  Serial.print("motor esq: ");
+  Serial.print(velEsq);
+  Serial.print("\t motor dir:");
+  Serial.print(velDir);
+  Serial.print("\t");
+
 }
 
-/*void Linha_de_chegada() {
-    delay(50);
-  if (volta == 0){
-    ligado = false;
+void Linha_de_chegada() {
+  if(largada == true){
+    while (digitalRead(botao) == 0){
+      ledcWrite(1, 0);
+      ledcWrite(0, 0);
+    }
+  delay(1000);
   }
-  volta += 1;
-}*/
+  largada = !largada;
+}
 
 void loop() {
   // calcula a posição da linha 
   uint16_t position = qtr.readLineWhite(sensorValues);
 
-  // printa os valores lidos
+  // soma os valores dos sensores
   total = 0;
   for (uint8_t i = 0; i < qtdSensores; i++) {
-    Serial.print(sensorValues[i]);
-    Serial.print('\t');
+    //Serial.print(sensorValues[i]);
+    //Serial.print('\t');
     total += sensorValues[i];
   }
-Serial.print(total);
+  Serial.print(total);
   if (total <= intercessao){ //caso haja intercessao
-    ledcWrite(1, 0);
-    ledcWrite(0, 0);
-    delay(1000);
     ledcWrite(1,speed);
     ledcWrite(0,speed);
-    delay(250); 
+    delay(50); 
+  }
+  if (digitalRead(sensordireito) == 1){
+    Linha_de_chegada();
   }
 
   //calcula o erro 
-  Serial.print("Erro: ");
+  //Serial.print("Erro: ");
   erro = (((int)position-3500)/100);
-  Serial.print(erro);
+  //Serial.print(erro);
   Serial.println();
 
   // calcula o PID
