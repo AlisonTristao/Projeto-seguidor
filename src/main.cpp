@@ -17,6 +17,7 @@ float kp = 117, ki = 0.2, kd = 0.1;
 
 // velocidade do carrinho
 float speed = 4095/3;
+int velEsq = speed, velDir = speed;
 
 // config da linha de sensores
 const uint8_t qtdSensores = 8;
@@ -30,7 +31,7 @@ int P, I, D, erroPassado, erroSomado = 0;
 float erro, PID;
 
 // variaveis para execoes
-#define intercessao 5000
+#define intercessao 3000
 bool ligado;
 int total;
 int volta = 0;
@@ -102,9 +103,6 @@ void setup() {
   ledcSetup(1, 5000, 12); // canal para o direito
   ledcAttachPin(PWMA, 1);
   ledcAttachPin(PWMB, 0);
-  // inicia como 0
-  //ledcWrite(0, 0);
-  //ledcWrite(1, 0);
 
   // inicia a task bluetooth
   xTaskCreatePinnedToCore(
@@ -174,7 +172,6 @@ void motors(){
   // controle de curva com PID
 
   // nao sei se essa parte é melhor assim @alison
-  int velEsq = speed, velDir = speed;
 
   if (volta == 0){
     if(PID > 0){
@@ -212,17 +209,21 @@ void loop() {
   uint16_t position = qtr.readLineWhite(sensorValues);
 
   // printa os valores lidos
+  total = 0;
   for (uint8_t i = 0; i < qtdSensores; i++) {
     Serial.print(sensorValues[i]);
     Serial.print('\t');
     total += sensorValues[i];
   }
-
-  /*Serial.println("");
+Serial.print(total);
   if (total <= intercessao){ //caso haja intercessao
     ledcWrite(1, 0);
     ledcWrite(0, 0);
-  }*/
+    delay(1000);
+    ledcWrite(1,speed);
+    ledcWrite(0,speed);
+    delay(250); 
+  }
 
   //calcula o erro 
   Serial.print("Erro: ");
