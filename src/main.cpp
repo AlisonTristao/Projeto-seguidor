@@ -17,7 +17,8 @@ float kp = 117, ki = 0.2, kd = 0.1;
 
 // velocidade do carrinho
 bool largada = false;
-float speed = 4095/2;
+const float speed = 4095/2;
+float v;
 int velEsq = speed, velDir = speed;
 float cte = 2.7;
 
@@ -54,7 +55,7 @@ void recebeDados(){
     ki = (texto.substring(texto.indexOf('/')+1, texto.indexOf('%'))).toFloat();
     kd = (texto.substring(texto.indexOf('%')+1, texto.indexOf('&'))).toFloat();
     //cte = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
-    speed = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
+    v = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
 
     // printa os valores
     Serial.print(kp);     Serial.print("\t");  
@@ -165,7 +166,7 @@ void calculaPID(){
   erroPassado = erro;
   temp_anterior = temp_atual;
 
-  Serial.print("P: ");
+  /*Serial.print("P: ");
   Serial.print(P);
   Serial.print("\t");
   Serial.print("I: ");
@@ -176,17 +177,17 @@ void calculaPID(){
   Serial.print("\t");
   Serial.print("PID: ");
   Serial.print(PID);
-  Serial.print(" ");
+  Serial.print(" ");*/
 }
 
 void motors(){
   // controle de curva com PID
   if(PID > 0){
-    velEsq = speed - PID;
-    velDir = speed; //- PID*PID/(cte*speed);
+    velEsq = (speed - PID) * v;
+    velDir = (speed) * v; //- PID*PID/(cte*speed);
   }else{
-    velDir = speed + PID;
-    velEsq = speed;// - PID*PID/(cte*speed);
+    velDir = (speed + PID) * v;
+    velEsq = (speed) * v;// - PID*PID/(cte*speed);
   }
 
   ledcWrite(1, velEsq);
