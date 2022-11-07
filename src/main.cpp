@@ -17,10 +17,12 @@ float kp = 117, ki = 0.2, kd = 0.1;
 
 // velocidade do carrinho
 bool largada = false;
-const float speed = 4095/2;
-float v;
+float speed = 4095/2;
+float v = 1;
 int velEsq = speed, velDir = speed;
 float cte = 2.7;
+
+unsigned long int t_intercessao;
 
 // config da linha de sensores
 const uint8_t qtdSensores = 8;
@@ -55,7 +57,7 @@ void recebeDados(){
     ki = (texto.substring(texto.indexOf('/')+1, texto.indexOf('%'))).toFloat();
     kd = (texto.substring(texto.indexOf('%')+1, texto.indexOf('&'))).toFloat();
     //cte = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
-    v = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
+    speed = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
 
     // printa os valores
     Serial.print(kp);     Serial.print("\t");  
@@ -83,14 +85,23 @@ void enviaDados(void * pvParameters){
   }
 }
 
+/*void contaVolta(){
+  volta += 1;
+  digitalWrite(2, !digitalRead(2));
+}*/
+
 void setup() {
   Serial.begin(115200);
   SerialBT.begin("Esp32 seguidor v1");
+
+  //attachInterrupt(digitalPinToInterrupt(sensordireito), contaVolta, CHANGE);
 
   // liga o led por estilo
   pinMode(2, OUTPUT);
   digitalWrite(2, HIGH);
 
+  pinMode(sensordireito, INPUT);
+  pinMode(sensoresquerdo, INPUT);
   // configuração da linha de sensores
   qtr.setTypeAnalog();
   qtr.setSensorPins((const uint8_t[]){39, 34, 35, 32, 33, 25, 26, 27}, qtdSensores);
@@ -183,33 +194,50 @@ void calculaPID(){
 void motors(){
   // controle de curva com PID
   if(PID > 0){
-    velEsq = (speed - PID) * v;
-    velDir = (speed) * v; //- PID*PID/(cte*speed);
+    velEsq = speed - PID;
+    velDir = speed; //- PID*PID/(cte*speed);
   }else{
-    velDir = (speed + PID) * v;
-    velEsq = (speed) * v;// - PID*PID/(cte*speed);
+    velDir = speed + PID;
+    velEsq = speed; // - PID*PID/(cte*speed);
   }
 
   ledcWrite(1, velEsq);
   ledcWrite(0, velDir);
 
-  Serial.print("motor esq: ");
+  /*Serial.print("motor esq: ");
   Serial.print(velEsq);
   Serial.print("\t motor dir:");
   Serial.print(velDir);
-  Serial.print("\t");
+  Serial.print("\t");*/
 
 }
 
 void Linha_de_chegada() {
-  if(largada == true){
-    while (digitalRead(botao) == 0){
-      ledcWrite(1, 0);
-      ledcWrite(0, 0);
+  if(largada == false){
+    //Serial.println("Tá DESLIGADO");
+    while(digitalRead(botao) == 1){
+      speed = 0;
+      ledcWrite(1,speed);
+      ledcWrite(0,speed);
     }
-  delay(1000);
+    largada = true;
   }
-  largada = !largada;
+  if(largada == true){
+    speed = 4095/2;
+    //Serial.println("LIGADO!!!");
+    //Serial.println(digitalRead(sensordireito));
+    if((digitalRead(sensordireito)==0) and (millis() > (t_intercessao+2000))){
+      //Serial.printf("detectou %d", volta);
+      while(digitalRead(sensordireito) == 0){}
+      volta += 1;
+      digitalWrite(2, !digitalRead(2));
+    }
+    if(volta == 2){
+      delay(50);
+      volta = 0;
+      largada = false;
+    }
+  }
 }
 
 void loop() {
@@ -219,19 +247,16 @@ void loop() {
   // soma os valores dos sensores
   total = 0;
   for (uint8_t i = 0; i < qtdSensores; i++) {
-    //Serial.print(sensorValues[i]);
-    //Serial.print('\t');
+    Serial.print(sensorValues[i]);
+    Serial.print('\t');
     total += sensorValues[i];
   }
-  Serial.print(total);
-  if (total <= intercessao){ //caso haja intercessao
-    ledcWrite(1,speed);
-    ledcWrite(0,speed);
-    delay(50); 
+  //Serial.print(total);
+  if (!(total >= intercessao)){ //caso haja intercessao
+    t_intercessao = millis();
+    //Serial.println("INTERCESSAO");
   }
-  if (digitalRead(sensordireito) == 1){
-    Linha_de_chegada();
-  }
+  Linha_de_chegada();
 
   //calcula o erro 
   //Serial.print("Erro: ");
