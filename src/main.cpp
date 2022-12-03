@@ -9,18 +9,25 @@ BluetoothSerial SerialBT;
 TaskHandle_t observer;
 
 // constantes do PID
-float kp = 117, ki = 0.2, kd = 0.1;
+float kp = 170, ki = 0.065, kd = 470;
+//float kp1 = 270, ki1 = 0.6, kd1 = 430;
 
 // pinos da ponte H
-#define PWMA 21
-#define PWMB 19
+#define PWMA 19
+#define PWMB 21
+#define esq1 15
+#define esq2 4
+#define dir1 5
+#define dir2 3
 
 // velocidade do carrinho
 bool largada = false;
-float speed = 4095;
-//float oldSpeed = 0;
-int velEsq = speed, velDir = speed;
-float cte = 2.7;
+int32_t speed = 3500;
+int32_t oldSpeed = speed;
+
+// velocidade dos motores esquerdo e direito
+int32_t velEsq = speed, velDir = speed;
+float cte = 0.7; // const para diminuir q roda gira para tras
 
 unsigned long int t_intercessao;
 
@@ -32,11 +39,10 @@ uint16_t sensorValues[qtdSensores];
 unsigned long temp_anterior=0, temp_atual, t;
 
 // variaveis para o PID
-int P, I, D, erroPassado, erroSomado = 0;
-float erro, PID;
+int P, I, D, erroPassado, erroSomado = 0, erro, PID;
 
 // variaveis para execoes
-#define intercessao 2500
+#define intercessao 4000
 #define botao 18
 #define sensoresquerdo 13
 #define sensordireito 36
@@ -54,18 +60,34 @@ void recebeDados(){
   if(a == '}'){
     // muda as constantes 
     kp = (texto.substring(1, texto.indexOf('/'))).toFloat();
+    //kp1 = (texto.substring(texto.indexOf('A')+1, texto.indexOf('/'))).toFloat();
+
     ki = (texto.substring(texto.indexOf('/')+1, texto.indexOf('%'))).toFloat();
+    //ki1 = (texto.substring(texto.indexOf('B')+1, texto.indexOf('%'))).toFloat();
+
     kd = (texto.substring(texto.indexOf('%')+1, texto.indexOf('&'))).toFloat();
-    speed = (texto.substring(texto.indexOf('&')+1, texto.indexOf('}'))).toFloat();
+    //kd1 = (texto.substring(texto.indexOf('C')+1, texto.indexOf('&'))).toFloat();
+
+    cte = (texto.substring(texto.indexOf('&')+1, texto.indexOf('*'))).toFloat();
+    speed = (texto.substring(texto.indexOf('*')+1, texto.indexOf('}'))).toFloat();
 
     // printa os valores
-    Serial.print(kp);     Serial.print("\t");  
-    Serial.print(ki);     Serial.print("\t"); 
+    Serial.print(kp);     Serial.print("\t");
+    //Serial.print(kp1);     Serial.print("\t"); 
+
+    Serial.print(ki);     Serial.print("\t");
+    //Serial.print(ki1);     Serial.print("\t"); 
+
     Serial.print(kd);     Serial.print("\t"); 
+    //Serial.print(kd1);     Serial.print("\t"); 
+
+    Serial.print(cte);     Serial.print("\t"); 
     Serial.print(speed);  Serial.print("\t");  
+    oldSpeed = speed;
     //Serial.print(cte);  Serial.println("");
 
     // limpa a variavel para o proximo loop
+    //Serial.println(texto);
     texto = "";
   }
 }
@@ -76,12 +98,12 @@ void enviaDados(void * pvParameters){
     if(SerialBT.available()){
       recebeDados();
     }else{
-      // senao ele envia os dados 
+      // senao ele envia os dados para montar o grafico
       delay(150);
-      // caso queirma mudar oq ele envia mude aqui
-      SerialBT.printf("{%f}", PID);
+      // caso queirm mudar oq ele envia mude aqui
+      SerialBT.printf("{%d}", PID);
     }
-  }
+  } 
 }
 
 void setup() {
@@ -90,6 +112,11 @@ void setup() {
 
   pinMode(sensordireito, INPUT);
   pinMode(sensoresquerdo, INPUT);
+  pinMode(botao, INPUT);
+  pinMode(esq1, OUTPUT);
+  pinMode(esq2, OUTPUT);
+  pinMode(dir1, OUTPUT);
+  pinMode(dir2, OUTPUT);
   pinMode(2, OUTPUT);
   // configuração da linha de sensores
   qtr.setTypeAnalog();
@@ -108,7 +135,6 @@ void setup() {
   }
 
   // config ponte H
-  pinMode(botao, INPUT);
   pinMode(PWMA, OUTPUT);
   pinMode(PWMB, OUTPUT);
   ledcSetup(0, 5000, 12); // canal para esquerdo
@@ -138,28 +164,24 @@ void calculaPID(){
   I = (erroSomado)* ki;
   D = ((erro - erroPassado)) * kd;
 
+  if((I>=(speed/2))&&(erro >=0)){ 
+    I = (speed/2);
+  }else if((I<=-(speed/2))&&(erro <=0)){
+    I = -(speed/2);
+  }else{
+    erroSomado += erro;
+  }
+
   // calcula o PID
   PID = (P) + (I) + (D);
 
   // anti-windup 
   // caso o PID passe o valor da velocidade max n soma o erro
-  if(PID>speed){
-    PID = speed;
-  }else if(PID<-speed){
-    PID = -speed;
-  }
-
-  if((I>=speed)&&(erro >=0)){ 
-    I = speed;
-  }else if((I<=-speed)&&(erro <=0)){
-    I = -speed;
-  }else{
-    erroSomado += erro;
-  }
-
-  // caso esteja na primeira volta ele usa metade da velocidade
-  if(volta == 0){
-    map(PID,-speed,speed,-speed/2,speed/2);
+  // e nao satura a integral
+  if(PID>speed*2){
+    PID = speed*2;
+  }else if(PID<(-speed*2)){
+    PID = -speed*2;
   }
 
   // salva o erro passado e tempo passado
@@ -183,15 +205,45 @@ void calculaPID(){
 void motors(){
   // controle de curva com PID
   if(PID > 0){
-    velEsq = speed - PID;
-    velDir = speed; //- PID*PID/(cte*speed);
+    velDir = speed - PID;
+    velEsq = speed;
   }else{
-    velDir = speed + PID;
-     velEsq = speed; // - PID*PID/(cte*speed);
+    velEsq = speed + PID;
+    velDir = speed;
   }
 
-  ledcWrite(1, velEsq);
-  ledcWrite(0, velDir);
+  if(velDir < 0){
+    // esquerda
+    digitalWrite(esq1, HIGH);
+    digitalWrite(esq2, LOW);
+
+    // direita
+    digitalWrite(dir1, LOW);
+    digitalWrite(dir2, HIGH);
+
+    velDir *= cte;
+  }else if(velEsq < 0){
+    // esquerda
+    digitalWrite(esq1, LOW);
+    digitalWrite(esq2, HIGH);
+
+    // direita
+    digitalWrite(dir1, HIGH);
+    digitalWrite(dir2, LOW);
+
+    velEsq *= cte;
+  }else{
+    // esquerda
+    digitalWrite(esq1, LOW);
+    digitalWrite(esq2, HIGH);
+
+    // direita
+    digitalWrite(dir1, LOW);
+    digitalWrite(dir2, HIGH);
+  }
+
+  ledcWrite(1, map(abs(velEsq), 0, speed, 400, speed));
+  ledcWrite(0, map(abs(velDir), 0, speed, 400, speed));
 
   /*Serial.print("motor esq: ");
   Serial.print(velEsq);
@@ -215,19 +267,28 @@ void Linha_de_chegada() {
   if(largada == true){
     //Serial.println("LIGADO!!!");
     //Serial.println(digitalRead(sensordireito));
-    if((digitalRead(sensordireito)==0) and (millis() > (t_intercessao+500))){
+    if((digitalRead(sensordireito)==0) and (millis() > (t_intercessao+700))){
       //Serial.printf("detectou %d", volta);
       while(digitalRead(sensordireito) == 0){}
-      volta += 1;
-      digitalWrite(2, !digitalRead(2));
+      volta++;
+
     }
+
+    // conta o final da pista e salva o tempo para parar
     if(volta == 2){
-      delay(50);
+      t_intercessao = millis();
+      volta++;
+    }
+
+    // espera um tempo para parar no final da pista (usa millis para nao terminar torto)
+    if((millis() >= t_intercessao + 100) and (volta == 3)){
       volta = 0;
       largada = false;
+      digitalWrite(2, HIGH);
     }
   }
 }
+
 
 void loop() {
   // calcula a posição da linha 
@@ -241,17 +302,22 @@ void loop() {
     total += sensorValues[i];
   }
   //Serial.print(total);
-  if (!(total >= intercessao)){ //caso haja intercessao
+  if (!(total >= intercessao)){ //caso haja intercessao 
     t_intercessao = millis(); 
     //Serial.println("INTERCESSAO");
+    ///digitalWrite(2, HIGH); // acende o led
+  }else{
+    //digitalWrite(2, LOW); // apaga o led
   }
+
+  // verifica as sinalizações da pista
   Linha_de_chegada();
 
   //calcula o erro 
   //Serial.print("Erro: ");
   erro = (((int)position-3500)/100);
   //Serial.print(erro);
-  //Serial.println();
+  Serial.println();
 
   // calcula o PID
   calculaPID();
